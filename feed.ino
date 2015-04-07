@@ -1,4 +1,5 @@
 void dispense() {
+  debugPort.println("Dispense");
   if (!motorJammed) {
     if(!debug) {
       dispenseStartTime = millis();
@@ -19,7 +20,9 @@ void dispense() {
       if (!disableMotor) digitalWrite(motorPin, LOW);
     };
     mqtt.publish("/pets/feed/cats", "fed");
-    //Spark.publish("doggies_fed","fed");
+    debugPort.println("fed -> /pets/feed/cats");
+  } else {
+    mqtt.publish("/pets/feed/cats", "jam");
   }
 }
 
@@ -30,6 +33,7 @@ void advanceMotor(long startTime, int runTime) {
 void jam() {
   if (!disableMotor) digitalWrite(motorPin, LOW);
   mqtt.publish("/pets/feed/cats", "jam");
+  debugPort.println("Jam.");
   motorJammed = true;
 }
 

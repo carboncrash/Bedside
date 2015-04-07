@@ -1,6 +1,10 @@
 /**
  * Prawnbot Three
  * (c) James Wood
+ *
+ * ESP8266 MQTT Library by Tuan PM <tuanpm@live.com>
+ * https://github.com/tuanpmt/esp_mqtt
+ *
  */
 
 #include <SoftwareSerial.h>
@@ -8,7 +12,8 @@
 #include <mqtt.h>
 #include "secrets.h"
 
-/* Create a file named secrets.h in your sketch folder. It should contain the following:
+/*
+ Create a file named secrets.h in your sketch folder. It should contain the following:
  
  #define wifiname "your wifi network name"
  #define wifipass "your wifi network password"
@@ -17,19 +22,21 @@
  
  */
 
-bool debug = false;
-bool disableMotor = false;
-bool motorJammed = false;
+boolean debug = false;
+boolean disableMotor = false;
+boolean motorJammed = false;
 
 int motorPin = 5;
-int switchPin = 2;
+int switchPin = 4;
 int ledPin = 13;
 int dispense(String command);
 int dispenseTimeout = 2000;
 int debounce = 50;
 long dispenseStartTime;
-SoftwareSerial softSerial(2, 3); // RX, TX
-ESP esp(&softSerial, &Serial, 4);
+
+SoftwareSerial debugPort(9, 10); // RX, TX
+ESP esp(&Serial, &debugPort, 4);
+
 MQTT mqtt(&esp);
 boolean wifiConnected = false;
 
@@ -41,7 +48,7 @@ void wifiCb(void* response)
   if(res.getArgc() == 1) {
     res.popArgs((uint8_t*)&status, 4);
     if(status == STATION_GOT_IP) {
-      Serial.println("WIFI CONNECTED");
+      debugPort.println("WIFI CONNECTED");
       mqtt.connect(mqttserver, mqttport, false);
       wifiConnected = true;  
       //or mqtt.connect("host", 1883); /*without security ssl*/
@@ -54,29 +61,27 @@ void wifiCb(void* response)
   }
 }
 
-void mqttConnected(void* response)
-{
-  Serial.println("MQTT Connected");
+void mqttConnected(void* response) {
+  debugPort.println("MQTT Connected");
   mqtt.subscribe("/pets/feed/cats"); //or mqtt.subscribe("topic"); /*with qos = 0*/
-  mqtt.publish("/pets/feed/cats", "online");
+  mqtt.publish("/pets/feed/cats/devices", "PrawnBot Online");
 }
 
-void mqttDisconnected(void* response)
-{
+void mqttDisconnected(void* response) {
 
 }
 
 void mqttData(void* response) {
   RESPONSE res(response);
-  Serial.print("Received: topic=");
+  debugPort.print("Received: topic=");
   String topic = res.popString();
-  Serial.println(topic);
+  debugPort.println(topic);
 
-  Serial.print("data=");
+  debugPort.print("data=");
   String data = res.popString();
-  Serial.println(data);
+  debugPort.println(data);
 
-  if (topic="/pets/feed/cats" && data="do"){
+  if (topic=="/pets/feed/cats" && data=="feed"){
     dispense();
   };
 }
@@ -86,38 +91,27 @@ void mqttPublished(void* response) {
 }
 
 void setup() {
-  softSerial.begin(19200);
+
+  pinMode(switchPin, INPUT_PULLUP);
+  pinMode(motorPin, OUTPUT);
+  pinMode(ledPin, OUTPUT);
+
   Serial.begin(19200);
-  Serial.println("Serial started...");
+  debugPort.begin(9600);
+  debugPort.println("Serial started...");
   esp.enable();
   delay(500);
   esp.reset();
   delay(500);
   while(!esp.ready());
 
-  pinMode(switchPin, INPUT_PULLUP);
-  pinMode(motorPin, OUTPUT);
-  pinMode(ledPin, OUTPUT);
-
-  if(!debug) {
-    while (digitalRead(switchPin)==HIGH) {
-      dispenseStartTime = millis();
-      advanceMotor(millis(), debounce);
-      if (millis() > dispenseStartTime + dispenseTimeout) {
-        jam();
-        break;
-      };
-    };
-    if (!disableMotor) digitalWrite(motorPin, LOW);
-  };
-
-  Serial.println("ARDUINO: setup mqtt client");
+  debugPort.println("ARDUINO: setup mqtt client");
   if(!mqtt.begin("Prawnbot Three", "", "", 120, 1)) {
-    Serial.println("ARDUINO: fail to setup mqtt");
+    debugPort.println("ARDUINO: fail to setup mqtt");
     while(1);
   }
 
-  Serial.println("ARDUINO: setup mqtt lwt");
+  debugPort.println("ARDUINO: setup mqtt lwt");
   mqtt.lwt("/lwt", "offline", 0, 0); //or mqtt.lwt("/lwt", "offline");
 
   /*setup mqtt events */
@@ -127,11 +121,25 @@ void setup() {
   mqtt.dataCb.attach(&mqttData);
 
   /*setup wifi*/
-  Serial.println("ARDUINO: setup wifi");
+  debugPort.println("ARDUINO: setup wifi");
   esp.wifiCb.attach(&wifiCb);
   esp.wifiConnect(wifiname, wifipass);
 
-  Serial.println("ARDUINO: system started");
+  debugPort.println("ARDUINO: system started");
+
+  if(!debug) {
+    debugPort.println("Resetting motor...");
+    dispenseStartTime = millis();
+    while (digitalRead(switchPin)==HIGH) {
+      advanceMotor(millis(), debounce);
+      if (millis() > dispenseStartTime + dispenseTimeout) {
+        jam();
+        break;
+      };
+    };
+    if (!disableMotor) digitalWrite(motorPin, LOW);
+    debugPort.println("Motor reset");
+  };
 }
 
 void loop() {
@@ -140,4 +148,6 @@ void loop() {
   }
   digitalWrite(ledPin, digitalRead(switchPin));
 }
+
+
 
