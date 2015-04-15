@@ -4,10 +4,10 @@ void setupNetworking(){
   esp.reset();
   delay(500);
   while(!esp.ready());
-  if(!mqtt.begin("Prawnbot", "", "", 120, 1)) {
+  if(!mqtt.begin("JamesBedside", "", "", 120, 1)) {
     while(1);
   }
-  mqtt.lwt("/pets/feed/cats/devices/prawnbot", "offline", 0, 0);
+  mqtt.lwt("upstairs/bedroom/light/james/status", "offline", 0, 0);
 
   /*setup mqtt events */
   mqtt.connectedCb.attach(&mqttConnected);
@@ -37,8 +37,8 @@ void wifiCb(void* response) {
 }
 
 void mqttConnected(void* response) {
-  mqtt.subscribe("/pets/feed/cats");
-  mqtt.publish("/pets/feed/cats/devices/prawnbot", "online");
+  mqtt.subscribe("upstairs/bedroom/light/james");
+  mqtt.publish("upstairs/bedroom/light/james/status", "online");
 }
 
 void mqttDisconnected(void* response) {
@@ -48,7 +48,13 @@ void mqttData(void* response) {
   RESPONSE res(response);
   String topic = res.popString();
   String data = res.popString();
-  if (topic=="/pets/feed/cats" && data=="feed") dispense();
+  if (topic=="upstairs/bedroom/light/james" && data=="ON") {
+    digitalWrite(lampPin, HIGH);
+    digitalWrite(ledPin, HIGH);
+  } else if (topic=="upstairs/bedroom/light/james" && data=="ON") {
+    digitalWrite(lampPin, LOW);
+    digitalWrite(ledPin, LOW);
+  };
 }
 
 void mqttPublished(void* response) {
